@@ -205,7 +205,7 @@ class MathlerGame:
             for letter in word:
                 if letter in self.word_lower:
                     letters.add(letter)
-        return "".join([i if i in letters else "*" for i in self.word_lower])
+        return "".join([i if i in letters else "@" for i in self.word_lower])
 
     def draw_hint(self, hint: str, savePath:str):
         board_w = self.length * self.block_size[0]
@@ -214,7 +214,7 @@ class MathlerGame:
         board = Image.new("RGB", (board_w, board_h), self.bg_color)
 
         for i in range(len(hint)):
-            letter = hint[i].replace("*", "")
+            letter = hint[i].replace("@", "")
             color = self.correct_color if letter else self.bg_color
             x = self.padding[0] + (self.block_size[0] + self.block_padding[0]) * i
             y = self.padding[1]
