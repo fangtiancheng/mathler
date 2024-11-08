@@ -19,7 +19,7 @@ def generate_expression(length, limit: int=10_000) -> Tuple[str, int]:
         raise ValueError("长度太短，至少需要3个字符")
     
     # 第一个模块：确定运算符
-    num_operators = random.randint(1, length // 2)
+    num_operators = random.randint(1, length // 2 - 1) #TODO: num_operators服从一定的分布
     valid_operators = ['+', '-', '*', '/']
     probabilities = [0.3, 0.3, 0.3, 0.1]
     operators = random.choices(valid_operators, probabilities, k=num_operators)
@@ -232,4 +232,5 @@ if __name__ == "__main__":
         mathler.draw(os.path.join(ROOT_PATH, SAVE_TMP_PATH, '3.png'))
     else:
         for _ in range(50):
-            print(generate_expression(10))
+            expr, val = generate_expression(10)
+            print(expr, len(expr))
