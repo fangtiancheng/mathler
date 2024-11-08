@@ -1,21 +1,94 @@
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Union
 from PIL import Image, ImageDraw, ImageFont
 import os
+import ast
 from enum import IntEnum
 from utils.basicConfigs import ROOT_PATH, SAVE_TMP_PATH, FONTS_PATH
-
+import random
+import itertools
 
 class GuessResult(IntEnum):
     WIN = 0  # 猜出正确单词
     LOSS = 1  # 达到最大可猜次数，未猜出正确单词
     DUPLICATE = 2  # 单词重复
     ILLEGAL = 3  # 单词不合法
+    LEGAL = 4 # 合法的猜测
+
+def generate_expression(length, limit: int=10_000) -> Tuple[str, int]:
+    if length < 3 :
+        raise ValueError("长度太短，至少需要3个字符")
+    
+    # 第一个模块：确定运算符
+    num_operators = random.randint(1, length // 2)
+    valid_operators = ['+', '-', '*', '/']
+    probabilities = [0.3, 0.3, 0.3, 0.1]
+    operators = random.choices(valid_operators, probabilities, k=num_operators)
+    
+    # 第二个模块，确定各数字长度
+    num_numbers = num_operators + 1
+    num_lens = [1] * num_numbers
+    extra_num_len = length - num_operators - num_numbers
+    for i in random.choices(list(range(num_numbers)), k=extra_num_len):
+        num_lens[i] += 1
+
+    
+    # 第三个模块，根据长度生成数字
+    def gen_num_by_len(len: int)->int:
+        if len <= 0:
+            raise ValueError('len <= 0')
+        if len == 1:
+            return random.randint(0, 9)
+        return random.randint(10**(len-1), (10**len)-1)
+    
+    # 第四个模块：验证准确性
+    for _ in range(30):
+        nums = [str(gen_num_by_len(len)) for len in num_lens]
+        result = ''.join([x for pair in itertools.zip_longest(nums, operators) for x in pair if x is not None])
+        try:
+            value = eval(result)
+            if value == int(value) and abs(int(value)) <= limit:
+                return result, int(value)
+        except:
+            continue
+    return generate_expression(length, limit)
+
+def calc_mathler_expr(word: str)->Tuple[bool, Union[int, str]]:
+    legal_ops = [ast.Add, ast.Sub, ast.Mult, ast.Div] # no binary
+    for c in word:
+        if not c.isdigit() and c not in '+-*/':
+            return False, '不合法字符“{}”，仅允许数字和+-*/'.format(c)
+    def check_expr(expr: ast.expr) -> Tuple[bool, str]:
+        if isinstance(expr, ast.BinOp):
+            if type(expr.op) not in legal_ops:
+                return False, '不合法运算符"{}"'.format(type(expr.op).__name__)
+            return check_expr(expr.left) and check_expr(expr.right)
+        elif isinstance(expr, ast.Constant):
+            if not isinstance(expr.value, int):
+                return False, "不合法常数“{}”".format(expr.value)
+            return True, ""
+        else: # no unary op
+            return False, "不合法运算符“{}”".format(type(expr).__name__)
+    try:
+        tree = ast.parse(word)
+        check_result, reason = check_expr(tree.body[0].value)
+        if not check_result:
+            return False, reason
+        value = eval(word)
+        if isinstance(value, float):
+            if int(value) != value:
+                return False, "计算结果“{}”非整数".format(value)
+        return True, int(value)
+    except Exception as e:
+        return False, "解析时出错：{}".format(e)
 
 class MathlerGame:
-    def __init__(self, word: str, meaning: str):
-        self.word: str = word  # 单词
-        self.meaning: str = meaning  # 单词释义
-        self.result = f"【单词】：{self.word}\n【释义】：{self.meaning}"
+    def __init__(self, word: str):
+        legal, value = calc_mathler_expr(word)
+        if not legal:
+            raise ValueError('mathler word illegal: {}'.format(value))
+        self.word: str = word  # 算式
+        self.value: int = value # 算式的值
+        self.result = f"【算式】：{self.word}\n【值】：{self.value}"
         self.word_lower: str = self.word.lower()
         self.length: int = len(word)  # 单词长度
         self.rows: int = self.length + 1  # 可猜次数
@@ -34,23 +107,34 @@ class MathlerGame:
         self.border_color = (123, 123, 124)  # 边框颜色
         self.bg_color = (255, 255, 255)  # 背景颜色
         self.font_color = (255, 255, 255)  # 文字颜色
-
         
-    def legal_word(self, word:str) -> bool:
-        raise NotImplementedError
+    def legal_word(self, word:str) -> Tuple[bool, str]:
+        legal_ops = [ast.Add, ast.Sub, ast.Mult, ast.Div] # no binary
+        if len(word) != self.length:
+            return False, '算式长度不对，期望长度{}，实际长度{}'.format(self.length, len(word))
+        legal, value = calc_mathler_expr(word)
+        if not legal:
+            return False, value
+        if value == self.value:
+            return True, '合法的猜测'
+        else:
+            return False, '结果不对，期望结果{}，实际结果{}'.format(self.value, value)
+        
     
-    def guess(self, word: str) -> Optional[GuessResult]:
+    def guess(self, word: str) -> Tuple[GuessResult, str]:
         word = word.lower()
         if word == self.word_lower:
             self.guessed_words.append(word)
-            return GuessResult.WIN
+            return GuessResult.WIN, '恭喜获胜'
         if word in self.guessed_words:
-            return GuessResult.DUPLICATE
-        if not self.legal_word(word):
-            return GuessResult.ILLEGAL
+            return GuessResult.DUPLICATE, '重复的猜测'
+        legal, reason = self.legal_word(word)
+        if not legal:
+            return GuessResult.ILLEGAL, reason
         self.guessed_words.append(word)
         if len(self.guessed_words) == self.rows:
-            return GuessResult.LOSS
+            return GuessResult.LOSS, '用掉了所有的机会'
+        return GuessResult.LEGAL, '可嘉的猜测'
 
     def draw_block(self, color: Tuple[int, int, int], letter: str) -> Image.Image:
         block = Image.new("RGB", self.block_size, self.border_color)
@@ -136,3 +220,16 @@ class MathlerGame:
             y = self.padding[1]
             board.paste(self.draw_block(color, letter), (x, y))
         board.save(savePath)
+
+if __name__ == "__main__":
+    if False:
+        mathler = MathlerGame('1+2+3+4')
+        print(mathler.guess('4+3+2+1'))
+        mathler.draw(os.path.join(ROOT_PATH, SAVE_TMP_PATH, '1.png'))
+        print(mathler.guess('1+3+3+3'))
+        mathler.draw(os.path.join(ROOT_PATH, SAVE_TMP_PATH, '2.png'))
+        print(mathler.guess('1+2+3+4'))
+        mathler.draw(os.path.join(ROOT_PATH, SAVE_TMP_PATH, '3.png'))
+    else:
+        for _ in range(50):
+            print(generate_expression(10))
