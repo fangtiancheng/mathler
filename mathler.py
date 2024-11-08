@@ -61,7 +61,13 @@ def calc_mathler_expr(word: str)->Tuple[bool, Union[int, str]]:
         if isinstance(expr, ast.BinOp):
             if type(expr.op) not in legal_ops:
                 return False, '不合法运算符"{}"'.format(type(expr.op).__name__)
-            return check_expr(expr.left) and check_expr(expr.right)
+            result, reason = check_expr(expr.left)
+            if not result:
+                return False, reason
+            result, reason = check_expr(expr.right)
+            if not result:
+                return False, reason
+            return True, ""
         elif isinstance(expr, ast.Constant):
             if not isinstance(expr.value, int):
                 return False, "不合法常数“{}”".format(expr.value)
@@ -222,9 +228,9 @@ class MathlerGame:
         board.save(savePath)
 
 if __name__ == "__main__":
-    if False:
+    if True:
         mathler = MathlerGame('1+2+3+4')
-        print(mathler.guess('4+3+2+1'))
+        print(mathler.guess('6//3+21'))
         mathler.draw(os.path.join(ROOT_PATH, SAVE_TMP_PATH, '1.png'))
         print(mathler.guess('1+3+3+3'))
         mathler.draw(os.path.join(ROOT_PATH, SAVE_TMP_PATH, '2.png'))
@@ -233,4 +239,4 @@ if __name__ == "__main__":
     else:
         for _ in range(50):
             expr, val = generate_expression(10)
-            print(expr, len(expr))
+            print(expr, val)
